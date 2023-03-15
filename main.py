@@ -109,8 +109,8 @@ def main_worker(gpu, ngpus_per_node, config):
     train_dataloader = DataLoader(ImageNet_train,batch_size=config.batch_size,num_workers=config.num_workers,pin_memory=True, sampler=train_sampler)
     valid_dataloader = DataLoader(ImageNet_valid,batch_size=1,num_workers=config.num_workers,pin_memory=True, sampler=val_sampler)
 
-    model = MobileNetV1(ch_in=3, n_classes=1000).cuda()
-    loss_fn = nn.CrossEntropyLoss().cuda()
+    model = MobileNetV1(ch_in=3, n_classes=1000).cuda(gpu)
+    loss_fn = nn.CrossEntropyLoss().cuda(gpu)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
@@ -119,8 +119,8 @@ def main_worker(gpu, ngpus_per_node, config):
             train_sampler.set_epoch(epoch)
 
         for (input, label) in tqdm(train_dataloader):
-            input = input.cuda()
-            label = label.cuda()
+            input = input.cuda(gpu)
+            label = label.cuda(gpu)
             output = model(input)
             loss = loss_fn(output, label)
             loss.backward()
@@ -129,9 +129,15 @@ def main_worker(gpu, ngpus_per_node, config):
         lr_scheduler.step()
 
         if epoch % 10 == 0:
-            print(f'Validation start')
-            acc1, acc5, loss = validation(model, valid_dataloader, loss_fn)
-            print(f'Epoch: {epoch}, acc1: {acc1}, acc5: {acc5}, loss: {loss}')
+            if torch.distributed.get_rank() == 0:
+                print(f'Validation start')
+                acc1, acc5, loss = validation(model, valid_dataloader, loss_fn)
+                print(f'Epoch: {epoch}, acc1: {acc1}, acc5: {acc5}, loss: {loss}')
+            torch.distributed.barrier()
+        
+        print(f'Saving checkpoint')
+        torch.save(model.state_dict(), f'./checkpoint/epoch_{epoch}.pth')
+
 
     print(f'Training done')
 
@@ -151,4 +157,8 @@ if __name__ == '__main__':
     
     config = parser.parse_args()
     print(config)
+
+    if not os.path.exists('./checkpoint'):
+        os.mkdir('./checkpoint')
+
     main(config)
