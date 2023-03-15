@@ -44,7 +44,7 @@ def validation(model, val_loader, loss_fn):
             acc5 += acc5_
 
     model.train()
-
+    print(f'len(val_loader) : {len(val_loader)}')
     acc1 = acc1 / len(val_loader)
     acc5 = acc5 / len(val_loader)
     loss = sum(losses) / len(losses)
@@ -118,6 +118,13 @@ def main_worker(gpu, ngpus_per_node, config):
         if config.distributed:
             train_sampler.set_epoch(epoch)
 
+        if epoch % 10 == 0:
+            if torch.distributed.get_rank() == 0:
+                print(f'Validation start')
+                acc1, acc5, loss = validation(model, valid_dataloader, loss_fn)
+                print(f'Epoch: {epoch}, acc1: {acc1}, acc5: {acc5}, loss: {loss}')
+            torch.distributed.barrier()
+
         for (input, label) in tqdm(train_dataloader):
             input = input.cuda(gpu)
             label = label.cuda(gpu)
@@ -128,15 +135,10 @@ def main_worker(gpu, ngpus_per_node, config):
             optimizer.zero_grad()
         lr_scheduler.step()
 
-        if epoch % 10 == 0:
-            if torch.distributed.get_rank() == 0:
-                print(f'Validation start')
-                acc1, acc5, loss = validation(model, valid_dataloader, loss_fn)
-                print(f'Epoch: {epoch}, acc1: {acc1}, acc5: {acc5}, loss: {loss}')
-            torch.distributed.barrier()
-        
-        print(f'Saving checkpoint')
-        torch.save(model.state_dict(), f'./checkpoint/epoch_{epoch}.pth')
+        if torch.distributed.get_rank() == 0:
+            print(f'Saving checkpoint epoch {epoch}')
+            torch.save(model.state_dict(), f'./checkpoint/epoch_{epoch}.pth')
+        torch.distributed.barrier()
 
 
     print(f'Training done')
