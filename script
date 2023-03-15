@@ -1,0 +1,4 @@
+python main.py \
+--gpu 0 \
+--world_size 1 \
+--rank 0

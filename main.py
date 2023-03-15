@@ -5,7 +5,8 @@ from torch.utils.data import DataLoader
 from torchsummaryX import summary
 from mobilenet import MobileNetV1
 from tqdm import tqdm
-
+import os
+import argparse
 
 def accuracy(output, target, topk=(1,)):
     """Computes the accuracy over the k top predictions for the specified values of k"""
@@ -51,7 +52,29 @@ def validation(model, val_loader, loss_fn):
     return acc1, acc5, loss
 
 
-def main(model:torch.nn.Module):
+def main(config):
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu
+    config.distributed = config.world_size > 1 or config.multiprocessing_distributed
+    ngpus_per_node = torch.cuda.device_count()
+
+    if config.multiprocessing_distributed:
+        config.world_size = ngpus_per_node * config.world_size
+        torch.multiprocessing.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, config))
+    else:
+        main_worker(config.gpu, ngpus_per_node, config)
+
+
+def main_worker(gpu, ngpus_per_node, config):
+    if config.gpu is not None:
+        print(f'Use GPU: {gpu} for training')
+
+    if config.distributed:
+        if config.dist_url == "envs://" and config.rank == -1:
+            config.rank = int(os.environ["RANK"])
+        if config.multiprocessing_distributed:
+            config.rank = config.rank * ngpus_per_node + gpu
+        torch.distributed.init_process_group(backend=config.dist_backend, init_method=config.dist_url, world_size=config.world_size, rank=config.rank)
+
     imagenet_path = '/home/lab-com/datasets/ImageNet1K/imagenet'
     epochs = 100
 
@@ -70,19 +93,32 @@ def main(model:torch.nn.Module):
                     normalize,
                     ])
 
-
     ImageNet_train = datasets.ImageFolder(imagenet_path + '/train',transform = transform_train)
     ImageNet_valid = datasets.ImageFolder(imagenet_path + '/val',transform = transform_val)
 
-    train_dataloader = DataLoader(ImageNet_train,batch_size=32,num_workers=4,pin_memory=True)
-    valid_dataloader = DataLoader(ImageNet_valid,batch_size=1,num_workers=4,pin_memory=True)
+    if config.distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(ImageNet_train)
+        val_sampler = torch.utils.data.distributed.DistributedSampler(ImageNet_valid, shuffle=False, drop_last=True)
+    else:
+        train_sampler = None
+        val_sampler = None
 
-    model = model.cuda()
+    config.batch_size = int(config.batch_size / ngpus_per_node)
+    config.num_workers = int((config.num_workers + ngpus_per_node - 1) / ngpus_per_node)
+
+
+    train_dataloader = DataLoader(ImageNet_train,batch_size=config.batch_size,num_workers=config.num_workers,pin_memory=True, sampler=train_sampler)
+    valid_dataloader = DataLoader(ImageNet_valid,batch_size=1,num_workers=config.num_workers,pin_memory=True, sampler=val_sampler)
+
+    model = MobileNetV1(ch_in=3, n_classes=1000).cuda()
     loss_fn = nn.CrossEntropyLoss().cuda()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
     for epoch in range(epochs):
+        if config.distributed:
+            train_sampler.set_epoch(epoch)
+
         for (input, label) in tqdm(train_dataloader):
             input = input.cuda()
             label = label.cuda()
@@ -101,5 +137,19 @@ def main(model:torch.nn.Module):
     print(f'Training done')
 
 if __name__ == '__main__':
-    model = MobileNetV1(ch_in=3, n_classes=1000)
-    main(model)
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--num_workers', type=int, default=4)
+
+    ############ Distributed Data Parallel (DDP) ############
+    parser.add_argument('--world_size', type=int, default=-1)
+    parser.add_argument('--rank', type=int, default=-1)
+    parser.add_argument('--gpu', type=str, default="0,1,2,3")
+    parser.add_argument('--dist-url', type=str, default=f"tcp://localhost:23456")
+    parser.add_argument('--dist-backend', type=str, default="nccl")
+    parser.add_argument('--multiprocessing_distributed', default=True)
+    
+    config = parser.parse_args()
+    print(config)
+    main(config)
