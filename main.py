@@ -43,7 +43,6 @@ def validation(model, val_loader, loss_fn):
             acc5 += acc5_[0]
 
     model.train()
-    print(f'len(val_loader) : {len(val_loader)}')
     acc1 = acc1 / len(val_loader)
     acc5 = acc5 / len(val_loader)
     loss = sum(losses) / len(losses)
@@ -73,8 +72,6 @@ def main_worker(gpu, ngpus_per_node, config):
         if config.multiprocessing_distributed:
             config.rank = config.rank * ngpus_per_node + gpu
         torch.distributed.init_process_group(backend=config.dist_backend, init_method=config.dist_url, world_size=config.world_size, rank=config.rank)
-
-    epochs = 100
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     transform_train = transforms.Compose([
@@ -113,7 +110,16 @@ def main_worker(gpu, ngpus_per_node, config):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
-    for epoch in range(epochs):
+    if config.resume is not None:
+        model.load_state_dict(config.resume['model'])
+        optimizer.load_state_dict(config.resume['optimizer'])
+        lr_scheduler.load_state_dict(config.resume['lr_scheduler'])
+        start_epoch = config.resume['epoch']
+    else:
+        start_epoch = 0
+
+
+    for epoch in range(start_epoch, config.epochs):
         if config.distributed:
             train_sampler.set_epoch(epoch)
 
@@ -136,7 +142,12 @@ def main_worker(gpu, ngpus_per_node, config):
 
         if torch.distributed.get_rank() == 0:
             print(f'Saving checkpoint epoch {epoch}')
-            torch.save(model.state_dict(), f'./checkpoint/epoch_{epoch}.pth')
+            torch.save({
+                'epoch': epoch + 1,
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'lr_scheduler': lr_scheduler.state_dict()
+            }, f'./checkpoint/epoch_{epoch}.pth')
         torch.distributed.barrier()
 
 
@@ -148,6 +159,8 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--data_path', type=str, default='/home/lab-com/datasets/ImageNet1K/imagenet')
+    parser.add_argument('--resume', type=str, default=None, metavar='PATH', help='path to the checkpoint (default: None)')
+    parser.add_argument('--epochs', type=int, default=100)
     ############ Distributed Data Parallel (DDP) ############
     parser.add_argument('--world_size', type=int, default=-1)
     parser.add_argument('--rank', type=int, default=-1)
