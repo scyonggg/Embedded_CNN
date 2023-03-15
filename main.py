@@ -34,14 +34,14 @@ def validation(model, val_loader, loss_fn):
         for _, data in enumerate(tqdm(val_loader)):
             input = data[0].cuda()
             gt = data[1].cuda()
-            print(f'GT : {gt}')
+            print(f'GT : {gt}, {gt.shape}')
             outputs = model(input)
             loss = loss_fn(outputs, gt)
 
             losses.append(loss)
             acc1_, acc5_ = accuracy(outputs, gt, topk=(1, 5))
-            acc1 += acc1_
-            acc5 += acc5_
+            acc1 += acc1_[0]
+            acc5 += acc5_[0]
 
     model.train()
     print(f'len(val_loader) : {len(val_loader)}')
