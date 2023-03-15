@@ -93,17 +93,18 @@ def main_worker(gpu, ngpus_per_node, config):
 
     if config.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(ImageNet_train)
-        val_sampler = torch.utils.data.distributed.DistributedSampler(ImageNet_valid, shuffle=False, drop_last=True)
+        # val_sampler = torch.utils.data.distributed.DistributedSampler(ImageNet_valid, shuffle=False, drop_last=True)
     else:
         train_sampler = None
-        val_sampler = None
+        # val_sampler = None
+    val_sampler = None
 
     config.batch_size = int(config.batch_size / ngpus_per_node)
     config.num_workers = int((config.num_workers + ngpus_per_node - 1) / ngpus_per_node)
 
 
     train_dataloader = DataLoader(ImageNet_train,batch_size=config.batch_size,num_workers=config.num_workers,pin_memory=True, sampler=train_sampler)
-    valid_dataloader = DataLoader(ImageNet_valid,batch_size=2,num_workers=config.num_workers,pin_memory=True, sampler=val_sampler)
+    valid_dataloader = DataLoader(ImageNet_valid,batch_size=1,num_workers=config.num_workers,pin_memory=True, sampler=val_sampler)
 
     model = MobileNetV1(ch_in=3, n_classes=1000).cuda(gpu)
     loss_fn = nn.CrossEntropyLoss().cuda(gpu)
