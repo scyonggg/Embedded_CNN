@@ -40,6 +40,7 @@ def validation(model, val_loader, loss_fn):
 
             losses.append(loss)
             acc1_, acc5_ = accuracy(outputs, gt, topk=(1, 5))
+            print(f'acc1_ : {acc1_}, acc5_ : {acc5_}')
             acc1 += acc1_[0]
             acc5 += acc5_[0]
 
@@ -107,7 +108,7 @@ def main_worker(gpu, ngpus_per_node, config):
 
 
     train_dataloader = DataLoader(ImageNet_train,batch_size=config.batch_size,num_workers=config.num_workers,pin_memory=True, sampler=train_sampler)
-    valid_dataloader = DataLoader(ImageNet_valid,batch_size=1,num_workers=config.num_workers,pin_memory=True, sampler=val_sampler)
+    valid_dataloader = DataLoader(ImageNet_valid,batch_size=2,num_workers=config.num_workers,pin_memory=True, sampler=val_sampler)
 
     model = MobileNetV1(ch_in=3, n_classes=1000).cuda(gpu)
     loss_fn = nn.CrossEntropyLoss().cuda(gpu)
