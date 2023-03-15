@@ -34,7 +34,7 @@ def validation(model, val_loader, loss_fn):
         for _, data in enumerate(tqdm(val_loader)):
             input = data[0].cuda()
             gt = data[1].cuda()
-
+            print(f'GT : {gt}')
             outputs = model(input)
             loss = loss_fn(outputs, gt)
 
