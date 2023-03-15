@@ -75,7 +75,6 @@ def main_worker(gpu, ngpus_per_node, config):
             config.rank = config.rank * ngpus_per_node + gpu
         torch.distributed.init_process_group(backend=config.dist_backend, init_method=config.dist_url, world_size=config.world_size, rank=config.rank)
 
-    imagenet_path = '/home/lab-com/datasets/ImageNet1K/imagenet'
     epochs = 100
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -93,8 +92,8 @@ def main_worker(gpu, ngpus_per_node, config):
                     normalize,
                     ])
 
-    ImageNet_train = datasets.ImageFolder(imagenet_path + '/train',transform = transform_train)
-    ImageNet_valid = datasets.ImageFolder(imagenet_path + '/val',transform = transform_val)
+    ImageNet_train = datasets.ImageFolder(config.data_path + '/train',transform = transform_train)
+    ImageNet_valid = datasets.ImageFolder(config.data_path + '/val',transform = transform_val)
 
     if config.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(ImageNet_train)
@@ -141,7 +140,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=4)
-
+    parser.add_arguemnt('--data_path', type=str, default='/home/lab-com/datasets/ImageNet1K/imagenet')
     ############ Distributed Data Parallel (DDP) ############
     parser.add_argument('--world_size', type=int, default=-1)
     parser.add_argument('--rank', type=int, default=-1)
