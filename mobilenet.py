@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 class MobileNetV1(nn.Module):
-    def __init__(self, ch_in, n_classes):
+    def __init__(self, ch_in=3, n_classes=1000):
         super(MobileNetV1, self).__init__()
 
         def conv_bn(inp, oup, stride):

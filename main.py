@@ -111,6 +111,20 @@ def main_worker(gpu, ngpus_per_node, config):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=1e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
+    if not torch.cuda.is_available():
+        print(f'Using CPU')
+    elif config.distributed:  # Using multi-GPUs
+        if config.gpu is not None:
+            torch.cuda.set_device(config.gpu)
+            model.cuda(config.gpu)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[config.gpu], find_unused_parameters=True)
+        else:
+            model.cuda()
+            model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)
+    elif config.gpu is not None:
+        torch.cuda.set_device(config.gpu)
+        model = model.cuda(config.gpu)
+
     if config.resume is not None:
         model.load_state_dict(config.resume['model'])
         optimizer.load_state_dict(config.resume['optimizer'])
