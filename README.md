@@ -20,4 +20,4 @@
 - Measure inference time and compare to other models
    - MobileNet is faster for **2x times than GoogleNet** and **6x times than VGG16**
 - Refer to `infer_speed.py` for measurement code
-<img src="https://github.com/scyonggg/Embedded_CNN/assets/77262389/df5abf1a-f52e-43aa-894c-2f0b1841b303" width="75%" height="75%"/>
+<img src="https://github.com/scyonggg/Embedded_CNN/assets/77262389/df5abf1a-f52e-43aa-894c-2f0b1841b303"/>
